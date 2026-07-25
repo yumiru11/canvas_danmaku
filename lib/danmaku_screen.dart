@@ -494,12 +494,11 @@ class _DanmakuScreenState<T> extends State<DanmakuScreen<T>>
   }
 
   /// 根据描边类型计算宽度/高度额外空间
-  double _strokeExtra() => switch (_option.strokeType) {
-        DanmakuStrokeType.none => 0,
-        DanmakuStrokeType.stroke => _option.strokeWidth,
-        DanmakuStrokeType.heavy => _option.strokeWidth * 2,
-        DanmakuStrokeType.shadow => _option.shadowOffset,
-      };
+  double _strokeExtra() => DmUtils.calcPadding(
+    _option.strokeType,
+    _option.strokeWidth,
+    _option.shadowOffset,
+  );
 
   @override
   void didUpdateWidget(DanmakuScreen<T> oldWidget) {

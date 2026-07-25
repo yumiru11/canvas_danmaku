@@ -50,6 +50,106 @@ abstract final class DmUtils {
       ..layout(const ui.ParagraphConstraints(width: double.infinity));
   }
 
+  /// 根据文字颜色亮度计算阴影颜色（B站 outlineColor 还原）
+  static Color _computeShadowColor(Color textColor) {
+    final brightness = 0.299 * textColor.r + 0.587 * textColor.g + 0.114 * textColor.b;
+    return brightness > 0.5 ? Colors.black : const Color(0xFF808080);
+  }
+
+  /// 根据描边类型构建阴影列表（B站 getShadow 函数还原）
+  static List<Shadow> _buildShadows(
+    DanmakuStrokeType type,
+    Color shadowColor,
+    double strokeWidth,
+    double shadowOffset,
+    double shadowOpacity,
+  ) {
+    // 以 strokeWidth=1.5 为基准缩放 B站默认效果
+    final scale = strokeWidth / 1.5;
+
+    switch (type) {
+      case DanmakuStrokeType.heavy:
+        // B站 fontBorder=0：四方向各偏移1px，模糊1px
+        return [
+          Shadow(offset: Offset(scale, 0), blurRadius: scale, color: shadowColor),
+          Shadow(offset: Offset(0, scale), blurRadius: scale, color: shadowColor),
+          Shadow(offset: Offset(0, -scale), blurRadius: scale, color: shadowColor),
+          Shadow(offset: Offset(-scale, 0), blurRadius: scale, color: shadowColor),
+        ];
+
+      case DanmakuStrokeType.stroke:
+        // B站 fontBorder=1：零偏移三层相同模糊叠加
+        return [
+          Shadow(offset: Offset.zero, blurRadius: scale, color: shadowColor),
+          Shadow(offset: Offset.zero, blurRadius: scale, color: shadowColor),
+          Shadow(offset: Offset.zero, blurRadius: scale, color: shadowColor),
+        ];
+
+      case DanmakuStrokeType.shadow:
+        // B站 fontBorder=2：偏移投影(2px模糊) + 基础描边(1px模糊)
+        return [
+          Shadow(
+            offset: Offset(shadowOffset, shadowOffset),
+            blurRadius: 2 * scale,
+            color: Colors.black.withValues(alpha: shadowOpacity),
+          ),
+          Shadow(offset: Offset.zero, blurRadius: scale, color: shadowColor),
+        ];
+
+      case DanmakuStrokeType.none:
+        return [];
+    }
+  }
+
+  /// 计算阴影所需的额外边距，防止 shadow 被裁剪
+  static double calcPadding(
+    DanmakuStrokeType type,
+    double strokeWidth,
+    double shadowOffset,
+  ) => switch (type) {
+    DanmakuStrokeType.none => 0,
+    DanmakuStrokeType.stroke => strokeWidth * 2,
+    DanmakuStrokeType.heavy => strokeWidth * 3,
+    DanmakuStrokeType.shadow => (shadowOffset + strokeWidth * 3).clamp(strokeWidth * 2, 20),
+  };
+
+  /// 构建带阴影的 Paragraph（替代旧的 stroke+fill 两层）
+  static ui.Paragraph _buildParagraphWithShadows({
+    required DanmakuContentItem content,
+    required double fontSize,
+    required int fontWeight,
+    required List<Shadow> shadows,
+  }) {
+    final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
+      textAlign: TextAlign.left,
+      fontWeight: FontWeight.values[fontWeight],
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    ));
+
+    if (content.count case final count?) {
+      builder
+        ..pushStyle(ui.TextStyle(
+          color: content.color,
+          fontSize: fontSize * 0.6,
+          shadows: shadows,
+        ))
+        ..addText('($count)')
+        ..pop();
+    }
+
+    builder
+      ..pushStyle(ui.TextStyle(
+        color: content.color,
+        fontSize: fontSize,
+        shadows: shadows,
+      ))
+      ..addText(content.text);
+
+    return builder.build()
+      ..layout(const ui.ParagraphConstraints(width: double.infinity));
+  }
+
   static ui.Image recordDanmakuImage({
     required ui.Paragraph contentParagraph,
     required DanmakuContentItem content,
@@ -57,39 +157,33 @@ abstract final class DmUtils {
     required int fontWeight,
     required double strokeWidth,
   }) {
-    final textWidth = contentParagraph.maxIntrinsicWidth;
-    final textHeight = contentParagraph.height;
+    final bool useShadow = strokeWidth > 0 && strokeType != DanmakuStrokeType.none;
 
-    final double extraW, extraH;
-    final Offset textOffset;
+    final ui.Paragraph renderParagraph;
+    final bool shouldDispose;
+    final double padding;
 
-    switch (strokeType) {
-      case DanmakuStrokeType.none:
-        extraW = 0;
-        extraH = 0;
-        textOffset = Offset.zero;
-      case DanmakuStrokeType.stroke:
-        extraW = strokeWidth;
-        extraH = strokeWidth;
-        textOffset = Offset(
-          (strokeWidth / 2.0) + (content.selfSend ? 2.0 : 0.0),
-          strokeWidth / 2.0,
-        );
-      case DanmakuStrokeType.heavy:
-        extraW = strokeWidth * 2;
-        extraH = strokeWidth * 2;
-        textOffset = Offset(
-          strokeWidth + (content.selfSend ? 2.0 : 0.0),
-          strokeWidth,
-        );
-      case DanmakuStrokeType.shadow:
-        extraW = shadowOffset;
-        extraH = shadowOffset;
-        textOffset = Offset.zero;
+    if (useShadow) {
+      final shadowColor = _computeShadowColor(content.color);
+      final shadows = _buildShadows(
+        strokeType, shadowColor, strokeWidth, shadowOffset, shadowOpacity,
+      );
+      renderParagraph = _buildParagraphWithShadows(
+        content: content,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        shadows: shadows,
+      );
+      shouldDispose = true;
+      padding = calcPadding(strokeType, strokeWidth, shadowOffset);
+    } else {
+      renderParagraph = contentParagraph;
+      shouldDispose = false;
+      padding = 0;
     }
 
-    double w = textWidth + extraW;
-    double h = textHeight + extraH;
+    final double w = renderParagraph.maxIntrinsicWidth + padding * 2;
+    final double h = renderParagraph.height + padding * 2;
 
     final rec = ui.PictureRecorder();
     final canvas = ui.Canvas(rec);
@@ -97,26 +191,13 @@ abstract final class DmUtils {
       canvas.scale(devicePixelRatio);
     }
 
-    switch (strokeType) {
-      case DanmakuStrokeType.none:
-        canvas.drawParagraph(contentParagraph, textOffset);
-      case DanmakuStrokeType.stroke:
-        _drawStrokeParagraph(canvas, content, fontSize, fontWeight,
-            strokeWidth, w, h, textOffset);
-        canvas.drawParagraph(contentParagraph, textOffset);
-      case DanmakuStrokeType.heavy:
-        _drawHeavyStroke(canvas, content, fontSize, fontWeight,
-            strokeWidth, w, h, textOffset);
-        canvas.drawParagraph(contentParagraph, textOffset);
-      case DanmakuStrokeType.shadow:
-        _drawShadowParagraph(canvas, content, fontSize, fontWeight,
-            textOffset);
-        canvas.drawParagraph(contentParagraph, textOffset);
-    }
+    canvas.drawParagraph(renderParagraph, Offset(padding, padding));
 
     if (content.selfSend) {
-      w += 4;
-      canvas.drawRect(Rect.fromLTRB(0, 0, w, h), _selfSendPaint);
+      canvas.drawRect(
+        Rect.fromLTRB(0, 0, w + 4, h),
+        _selfSendPaint..strokeWidth = strokeWidth,
+      );
     }
 
     final pic = rec.endRecording();
@@ -125,172 +206,12 @@ abstract final class DmUtils {
       (h * devicePixelRatio).ceil(),
     );
     pic.dispose();
+
+    if (shouldDispose) {
+      renderParagraph.dispose();
+    }
+
     return img;
-  }
-
-  static void _drawStrokeParagraph(
-    ui.Canvas canvas,
-    DanmakuContentItem content,
-    double fontSize,
-    int fontWeight,
-    double strokeWidth,
-    double w,
-    double h,
-    Offset offset,
-  ) {
-    final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-      textAlign: TextAlign.left,
-      fontWeight: FontWeight.values[fontWeight],
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    ));
-    final Paint strokePaint = Paint()
-      ..shader = content.isColorful
-          ? const LinearGradient(
-                  colors: [Color(0xFFF2509E), Color(0xFF308BCD)])
-              .createShader(Rect.fromLTWH(0, 0, w, h))
-          : null
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-
-    if (!content.isColorful) {
-      strokePaint.color = Colors.black;
-    }
-
-    if (content.count case final count?) {
-      builder
-        ..pushStyle(ui.TextStyle(
-          fontSize: fontSize * 0.6,
-          foreground: strokePaint,
-        ))
-        ..addText('($count)')
-        ..pop();
-    }
-
-    builder
-      ..pushStyle(ui.TextStyle(fontSize: fontSize, foreground: strokePaint))
-      ..addText(content.text);
-
-    final strokeParagraph = builder.build()
-      ..layout(const ui.ParagraphConstraints(width: double.infinity));
-
-    canvas.drawParagraph(strokeParagraph, offset);
-    strokeParagraph.dispose();
-  }
-
-  static void _drawHeavyStroke(
-    ui.Canvas canvas,
-    DanmakuContentItem content,
-    double fontSize,
-    int fontWeight,
-    double strokeWidth,
-    double w,
-    double h,
-    Offset offset,
-  ) {
-    // 8方向多层偏移叠加，产生B站风格"重墨"效果
-    final offsets = [
-      const Offset(-0.7, -0.7),
-      const Offset(0, -0.7),
-      const Offset(0.7, -0.7),
-      const Offset(-0.7, 0),
-      const Offset(0.7, 0),
-      const Offset(-0.7, 0.7),
-      const Offset(0, 0.7),
-      const Offset(0.7, 0.7),
-    ];
-    final baseStroke = _buildStrokeParagraph(
-      content, fontSize, fontWeight, strokeWidth, w, h,
-    );
-    for (final d in offsets) {
-      canvas.drawParagraph(baseStroke, offset + d);
-    }
-    baseStroke.dispose();
-  }
-
-  static ui.Paragraph _buildStrokeParagraph(
-    DanmakuContentItem content,
-    double fontSize,
-    int fontWeight,
-    double strokeWidth,
-    double w,
-    double h,
-  ) {
-    final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-      textAlign: TextAlign.left,
-      fontWeight: FontWeight.values[fontWeight],
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    ));
-    final Paint strokePaint = Paint()
-      ..shader = content.isColorful
-          ? const LinearGradient(
-                  colors: [Color(0xFFF2509E), Color(0xFF308BCD)])
-              .createShader(Rect.fromLTWH(0, 0, w, h))
-          : null
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-
-    if (!content.isColorful) {
-      strokePaint.color = Colors.black;
-    }
-
-    if (content.count case final count?) {
-      builder
-        ..pushStyle(ui.TextStyle(
-          fontSize: fontSize * 0.6,
-          foreground: strokePaint,
-        ))
-        ..addText('($count)')
-        ..pop();
-    }
-
-    builder
-      ..pushStyle(ui.TextStyle(fontSize: fontSize, foreground: strokePaint))
-      ..addText(content.text);
-
-    final paragraph = builder.build()
-      ..layout(const ui.ParagraphConstraints(width: double.infinity));
-    return paragraph;
-  }
-
-  static void _drawShadowParagraph(
-    ui.Canvas canvas,
-    DanmakuContentItem content,
-    double fontSize,
-    int fontWeight,
-    Offset textOffset,
-  ) {
-    final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-      textAlign: TextAlign.left,
-      fontWeight: FontWeight.values[fontWeight],
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    ));
-
-    if (content.count case final count?) {
-      builder
-        ..pushStyle(ui.TextStyle(
-          color: Colors.black.withValues(alpha: shadowOpacity),
-          fontSize: fontSize * 0.6,
-        ))
-        ..addText('($count)')
-        ..pop();
-    }
-
-    builder
-      ..pushStyle(ui.TextStyle(
-        color: Colors.black.withValues(alpha: shadowOpacity),
-        fontSize: fontSize,
-      ))
-      ..addText(content.text);
-
-    final shadowParagraph = builder.build()
-      ..layout(const ui.ParagraphConstraints(width: double.infinity));
-
-    // 在右下45°偏移位置画半透明投影
-    canvas.drawParagraph(shadowParagraph, textOffset + Offset(shadowOffset, shadowOffset));
-    shadowParagraph.dispose();
   }
 
   static ui.Image recordSpecialDanmakuImg({
