@@ -19,6 +19,7 @@ final class ScrollDanmakuPainter extends BaseDanmakuPainter {
     required super.strokeWidth,
     required super.running,
     required super.tick,
+    super.strokeType,
     super.batchThreshold,
   });
 

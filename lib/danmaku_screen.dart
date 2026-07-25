@@ -78,6 +78,9 @@ class _DanmakuScreenState<T> extends State<DanmakuScreen<T>>
       _scrollVelocityOrDuration = _option.durationInMilliseconds;
     }
     DmUtils.updateSelfSendPaint(_option.strokeWidth);
+    DmUtils.strokeType = _option.strokeType;
+    DmUtils.shadowOffset = _option.shadowOffset;
+    DmUtils.shadowOpacity = _option.shadowOpacity;
 
     _danmakuHeight = _textPainter.height;
 
@@ -169,8 +172,8 @@ class _DanmakuScreenState<T> extends State<DanmakuScreen<T>>
     final danmakuWidth = (content.selfSend
             ? paragraph.maxIntrinsicWidth + 4
             : paragraph.maxIntrinsicWidth) +
-        _option.strokeWidth;
-    final danmakuHeight = paragraph.height + _option.strokeWidth;
+        _strokeExtra();
+    final danmakuHeight = paragraph.height + _strokeExtra();
 
     if (!scroll &&
         content.type != DanmakuItemType.scroll &&
@@ -328,7 +331,10 @@ class _DanmakuScreenState<T> extends State<DanmakuScreen<T>>
 
     final clearParagraph = fontSizeChanged ||
         option.fontWeight != _option.fontWeight ||
-        option.strokeWidth != _option.strokeWidth;
+        option.strokeWidth != _option.strokeWidth ||
+        option.strokeType != _option.strokeType ||
+        option.shadowOffset != _option.shadowOffset ||
+        option.shadowOpacity != _option.shadowOpacity;
 
     final needRestart = _ticker.isActive && clearScroll && clearParagraph;
     if (needRestart) {
@@ -363,7 +369,10 @@ class _DanmakuScreenState<T> extends State<DanmakuScreen<T>>
 
     /// 清理已经存在的 Paragraph 缓存
     if (clearParagraph) {
-      DmUtils.updateSelfSendPaint(_option.strokeWidth);
+      DmUtils.updateSelfSendPaint(option.strokeWidth);
+      DmUtils.strokeType = option.strokeType;
+      DmUtils.shadowOffset = option.shadowOffset;
+      DmUtils.shadowOpacity = option.shadowOpacity;
       for (var i in _scrollDanmakuItems) {
         for (var e in i) {
           e.dispose();
@@ -484,6 +493,14 @@ class _DanmakuScreenState<T> extends State<DanmakuScreen<T>>
     }
   }
 
+  /// 根据描边类型计算宽度/高度额外空间
+  double _strokeExtra() => switch (_option.strokeType) {
+        DanmakuStrokeType.none => 0,
+        DanmakuStrokeType.stroke => _option.strokeWidth,
+        DanmakuStrokeType.heavy => _option.strokeWidth * 2,
+        DanmakuStrokeType.shadow => _option.shadowOffset,
+      };
+
   @override
   void didUpdateWidget(DanmakuScreen<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -528,6 +545,7 @@ class _DanmakuScreenState<T> extends State<DanmakuScreen<T>>
                     fontSize: _option.fontSize,
                     fontWeight: _option.fontWeight,
                     strokeWidth: _option.strokeWidth,
+                    strokeType: _option.strokeType,
                     running: _running,
                     tick: value,
                   ),
@@ -551,6 +569,7 @@ class _DanmakuScreenState<T> extends State<DanmakuScreen<T>>
                     fontSize: _option.fontSize,
                     fontWeight: _option.fontWeight,
                     strokeWidth: _option.strokeWidth,
+                    strokeType: _option.strokeType,
                     tick: _notifier.value,
                   ),
                   size: widget.size,
@@ -571,6 +590,7 @@ class _DanmakuScreenState<T> extends State<DanmakuScreen<T>>
                     fontSize: _option.fontSize,
                     fontWeight: _option.fontWeight,
                     strokeWidth: _option.strokeWidth,
+                    strokeType: _option.strokeType,
                     running: _running,
                     tick: value,
                   ),

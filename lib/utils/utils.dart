@@ -2,12 +2,16 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:canvas_danmaku/models/danmaku_content_item.dart';
+import 'package:canvas_danmaku/models/danmaku_option.dart';
 import 'package:flutter/material.dart';
 
 abstract final class DmUtils {
   static const maxRasterizeSize = 8192.0;
 
   static double devicePixelRatio = 1;
+  static DanmakuStrokeType strokeType = DanmakuStrokeType.stroke;
+  static double shadowOffset = 1.5;
+  static double shadowOpacity = 0.5;
   static final Paint _selfSendPaint = Paint()
     ..style = PaintingStyle.stroke
     ..color = Colors.green;
@@ -53,13 +57,39 @@ abstract final class DmUtils {
     required int fontWeight,
     required double strokeWidth,
   }) {
-    double w = contentParagraph.maxIntrinsicWidth + strokeWidth;
-    double h = contentParagraph.height + strokeWidth;
+    final textWidth = contentParagraph.maxIntrinsicWidth;
+    final textHeight = contentParagraph.height;
 
-    final offset = Offset(
-      (strokeWidth / 2.0) + (content.selfSend ? 2.0 : 0.0),
-      strokeWidth / 2.0,
-    );
+    final double extraW, extraH;
+    final Offset textOffset;
+
+    switch (strokeType) {
+      case DanmakuStrokeType.none:
+        extraW = 0;
+        extraH = 0;
+        textOffset = Offset.zero;
+      case DanmakuStrokeType.stroke:
+        extraW = strokeWidth;
+        extraH = strokeWidth;
+        textOffset = Offset(
+          (strokeWidth / 2.0) + (content.selfSend ? 2.0 : 0.0),
+          strokeWidth / 2.0,
+        );
+      case DanmakuStrokeType.heavy:
+        extraW = strokeWidth * 2;
+        extraH = strokeWidth * 2;
+        textOffset = Offset(
+          strokeWidth + (content.selfSend ? 2.0 : 0.0),
+          strokeWidth,
+        );
+      case DanmakuStrokeType.shadow:
+        extraW = shadowOffset;
+        extraH = shadowOffset;
+        textOffset = Offset.zero;
+    }
+
+    double w = textWidth + extraW;
+    double h = textHeight + extraH;
 
     final rec = ui.PictureRecorder();
     final canvas = ui.Canvas(rec);
@@ -67,48 +97,22 @@ abstract final class DmUtils {
       canvas.scale(devicePixelRatio);
     }
 
-    if (strokeWidth != 0) {
-      final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-        textAlign: TextAlign.left,
-        fontWeight: FontWeight.values[fontWeight],
-        textDirection: TextDirection.ltr,
-        maxLines: 1,
-      ));
-      final Paint strokePaint = Paint()
-        ..shader = content.isColorful
-            ? const LinearGradient(
-                    colors: [Color(0xFFF2509E), Color(0xFF308BCD)])
-                .createShader(Rect.fromLTWH(0, 0, w, h))
-            : null
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth;
-
-      if (!content.isColorful) {
-        strokePaint.color = Colors.black;
-      }
-
-      if (content.count case final count?) {
-        builder
-          ..pushStyle(ui.TextStyle(
-            fontSize: fontSize * 0.6,
-            foreground: strokePaint,
-          ))
-          ..addText('($count)')
-          ..pop();
-      }
-
-      builder
-        ..pushStyle(ui.TextStyle(fontSize: fontSize, foreground: strokePaint))
-        ..addText(content.text);
-
-      final strokeParagraph = builder.build()
-        ..layout(const ui.ParagraphConstraints(width: double.infinity));
-
-      canvas.drawParagraph(strokeParagraph, offset);
-      strokeParagraph.dispose();
+    switch (strokeType) {
+      case DanmakuStrokeType.none:
+        canvas.drawParagraph(contentParagraph, textOffset);
+      case DanmakuStrokeType.stroke:
+        _drawStrokeParagraph(canvas, content, fontSize, fontWeight,
+            strokeWidth, w, h, textOffset);
+        canvas.drawParagraph(contentParagraph, textOffset);
+      case DanmakuStrokeType.heavy:
+        _drawHeavyStroke(canvas, content, fontSize, fontWeight,
+            strokeWidth, w, h, textOffset);
+        canvas.drawParagraph(contentParagraph, textOffset);
+      case DanmakuStrokeType.shadow:
+        _drawShadowParagraph(canvas, content, fontSize, fontWeight,
+            textOffset);
+        canvas.drawParagraph(contentParagraph, textOffset);
     }
-
-    canvas.drawParagraph(contentParagraph, offset);
 
     if (content.selfSend) {
       w += 4;
@@ -122,6 +126,171 @@ abstract final class DmUtils {
     );
     pic.dispose();
     return img;
+  }
+
+  static void _drawStrokeParagraph(
+    ui.Canvas canvas,
+    DanmakuContentItem content,
+    double fontSize,
+    int fontWeight,
+    double strokeWidth,
+    double w,
+    double h,
+    Offset offset,
+  ) {
+    final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
+      textAlign: TextAlign.left,
+      fontWeight: FontWeight.values[fontWeight],
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    ));
+    final Paint strokePaint = Paint()
+      ..shader = content.isColorful
+          ? const LinearGradient(
+                  colors: [Color(0xFFF2509E), Color(0xFF308BCD)])
+              .createShader(Rect.fromLTWH(0, 0, w, h))
+          : null
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    if (!content.isColorful) {
+      strokePaint.color = Colors.black;
+    }
+
+    if (content.count case final count?) {
+      builder
+        ..pushStyle(ui.TextStyle(
+          fontSize: fontSize * 0.6,
+          foreground: strokePaint,
+        ))
+        ..addText('($count)')
+        ..pop();
+    }
+
+    builder
+      ..pushStyle(ui.TextStyle(fontSize: fontSize, foreground: strokePaint))
+      ..addText(content.text);
+
+    final strokeParagraph = builder.build()
+      ..layout(const ui.ParagraphConstraints(width: double.infinity));
+
+    canvas.drawParagraph(strokeParagraph, offset);
+    strokeParagraph.dispose();
+  }
+
+  static void _drawHeavyStroke(
+    ui.Canvas canvas,
+    DanmakuContentItem content,
+    double fontSize,
+    int fontWeight,
+    double strokeWidth,
+    double w,
+    double h,
+    Offset offset,
+  ) {
+    // 8方向多层偏移叠加，产生B站风格"重墨"效果
+    final offsets = [
+      const Offset(-0.7, -0.7),
+      const Offset(0, -0.7),
+      const Offset(0.7, -0.7),
+      const Offset(-0.7, 0),
+      const Offset(0.7, 0),
+      const Offset(-0.7, 0.7),
+      const Offset(0, 0.7),
+      const Offset(0.7, 0.7),
+    ];
+    final baseStroke = _buildStrokeParagraph(
+      content, fontSize, fontWeight, strokeWidth, w, h,
+    );
+    for (final d in offsets) {
+      canvas.drawParagraph(baseStroke, offset + d);
+    }
+    baseStroke.dispose();
+  }
+
+  static ui.Paragraph _buildStrokeParagraph(
+    DanmakuContentItem content,
+    double fontSize,
+    int fontWeight,
+    double strokeWidth,
+    double w,
+    double h,
+  ) {
+    final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
+      textAlign: TextAlign.left,
+      fontWeight: FontWeight.values[fontWeight],
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    ));
+    final Paint strokePaint = Paint()
+      ..shader = content.isColorful
+          ? const LinearGradient(
+                  colors: [Color(0xFFF2509E), Color(0xFF308BCD)])
+              .createShader(Rect.fromLTWH(0, 0, w, h))
+          : null
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    if (!content.isColorful) {
+      strokePaint.color = Colors.black;
+    }
+
+    if (content.count case final count?) {
+      builder
+        ..pushStyle(ui.TextStyle(
+          fontSize: fontSize * 0.6,
+          foreground: strokePaint,
+        ))
+        ..addText('($count)')
+        ..pop();
+    }
+
+    builder
+      ..pushStyle(ui.TextStyle(fontSize: fontSize, foreground: strokePaint))
+      ..addText(content.text);
+
+    final paragraph = builder.build()
+      ..layout(const ui.ParagraphConstraints(width: double.infinity));
+    return paragraph;
+  }
+
+  static void _drawShadowParagraph(
+    ui.Canvas canvas,
+    DanmakuContentItem content,
+    double fontSize,
+    int fontWeight,
+    Offset textOffset,
+  ) {
+    final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
+      textAlign: TextAlign.left,
+      fontWeight: FontWeight.values[fontWeight],
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    ));
+
+    if (content.count case final count?) {
+      builder
+        ..pushStyle(ui.TextStyle(
+          color: Colors.black.withValues(alpha: shadowOpacity),
+          fontSize: fontSize * 0.6,
+        ))
+        ..addText('($count)')
+        ..pop();
+    }
+
+    builder
+      ..pushStyle(ui.TextStyle(
+        color: Colors.black.withValues(alpha: shadowOpacity),
+        fontSize: fontSize,
+      ))
+      ..addText(content.text);
+
+    final shadowParagraph = builder.build()
+      ..layout(const ui.ParagraphConstraints(width: double.infinity));
+
+    // 在右下45°偏移位置画半透明投影
+    canvas.drawParagraph(shadowParagraph, textOffset + Offset(shadowOffset, shadowOffset));
+    shadowParagraph.dispose();
   }
 
   static ui.Image recordSpecialDanmakuImg({

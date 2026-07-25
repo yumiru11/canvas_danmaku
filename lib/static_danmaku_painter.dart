@@ -1,5 +1,6 @@
 import 'package:canvas_danmaku/base_danmaku_painter.dart';
 import 'package:canvas_danmaku/models/danmaku_item.dart';
+import 'package:canvas_danmaku/models/danmaku_option.dart';
 import 'package:flutter/material.dart';
 
 final class StaticDanmakuPainter extends CustomPainter {
@@ -11,6 +12,7 @@ final class StaticDanmakuPainter extends CustomPainter {
   final int fontWeight;
   final double strokeWidth;
   final int tick;
+  final DanmakuStrokeType strokeType;
 
   StaticDanmakuPainter({
     required this.count,
@@ -21,6 +23,7 @@ final class StaticDanmakuPainter extends CustomPainter {
     required this.fontWeight,
     required this.strokeWidth,
     required this.tick,
+    this.strokeType = DanmakuStrokeType.stroke,
   });
 
   @override
@@ -52,5 +55,6 @@ final class StaticDanmakuPainter extends CustomPainter {
       oldDelegate.count != count ||
       oldDelegate.fontSize != fontSize ||
       oldDelegate.fontWeight != fontWeight ||
-      oldDelegate.strokeWidth != strokeWidth;
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.strokeType != strokeType;
 }

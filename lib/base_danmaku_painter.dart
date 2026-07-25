@@ -9,6 +9,7 @@ abstract base class BaseDanmakuPainter extends CustomPainter {
   final bool running;
   final int batchThreshold;
   final int tick;
+  final DanmakuStrokeType strokeType;
 
   static final Paint _paint = Paint();
 
@@ -19,7 +20,8 @@ abstract base class BaseDanmakuPainter extends CustomPainter {
     required this.strokeWidth,
     required this.running,
     required this.tick,
-    this.batchThreshold = 10, // 默认值为10，可以自行调整
+    this.batchThreshold = 10,
+    this.strokeType = DanmakuStrokeType.stroke,
   });
 
   static void paintImg(
@@ -45,6 +47,7 @@ abstract base class BaseDanmakuPainter extends CustomPainter {
         oldDelegate.length != length ||
         oldDelegate.fontSize != fontSize ||
         oldDelegate.fontWeight != fontWeight ||
-        oldDelegate.strokeWidth != strokeWidth;
+        oldDelegate.strokeWidth != strokeWidth ||
+        oldDelegate.strokeType != strokeType;
   }
 }

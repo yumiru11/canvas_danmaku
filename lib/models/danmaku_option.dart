@@ -1,5 +1,20 @@
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 
+/// 弹幕描边类型
+enum DanmakuStrokeType {
+  /// 无描边
+  none,
+
+  /// 标准描边
+  stroke,
+
+  /// 重墨（多层偏移叠加描边）
+  heavy,
+
+  /// 45°投影（右下方向半透明阴影）
+  shadow,
+}
+
 class DanmakuOption {
   /// 默认的字体大小
   final double fontSize;
@@ -35,6 +50,15 @@ class DanmakuOption {
   /// 弹幕描边
   final double strokeWidth;
 
+  /// 弹幕描边类型
+  final DanmakuStrokeType strokeType;
+
+  /// 45°投影偏移量（像素）
+  final double shadowOffset;
+
+  /// 45°投影透明度 (0.0 ~ 1.0)
+  final double shadowOpacity;
+
   /// 滚动弹幕速度不随内容长度变化
   final bool scrollFixedVelocity;
 
@@ -68,6 +92,9 @@ class DanmakuOption {
     this.hideTop = false,
     this.hideSpecial = false,
     this.strokeWidth = 1.5,
+    this.strokeType = DanmakuStrokeType.stroke,
+    this.shadowOffset = 1.5,
+    this.shadowOpacity = 0.5,
     this.scrollFixedVelocity = false,
     this.massiveMode = false,
     this.static2Scroll = false,
@@ -87,6 +114,9 @@ class DanmakuOption {
     bool? hideScroll,
     bool? hideSpecial,
     double? strokeWidth,
+    DanmakuStrokeType? strokeType,
+    double? shadowOffset,
+    double? shadowOpacity,
     bool? scrollFixedVelocity,
     bool? massiveMode,
     bool? static2Scroll,
@@ -104,6 +134,9 @@ class DanmakuOption {
       hideScroll: hideScroll ?? this.hideScroll,
       hideSpecial: hideSpecial ?? this.hideSpecial,
       strokeWidth: strokeWidth ?? this.strokeWidth,
+      strokeType: strokeType ?? this.strokeType,
+      shadowOffset: shadowOffset ?? this.shadowOffset,
+      shadowOpacity: shadowOpacity ?? this.shadowOpacity,
       scrollFixedVelocity: scrollFixedVelocity ?? this.scrollFixedVelocity,
       massiveMode: massiveMode ?? this.massiveMode,
       static2Scroll: static2Scroll ?? this.static2Scroll,
